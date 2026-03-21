@@ -28,7 +28,7 @@ export default function CitizenReports() {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res  = await fetch('http://localhost:8000/api/reports/all?limit=100');
+      const res  = await fetch('https://pune-urban-shield-backend.onrender.com/api/reports/all?limit=100');
       const json = await res.json();
       setReports(json.reports || []);
       setLastRefresh(new Date());
@@ -38,7 +38,7 @@ export default function CitizenReports() {
 
   const fetchDbStatus = useCallback(async () => {
     try {
-      const res  = await fetch('http://localhost:8000/api/db/status');
+      const res  = await fetch('https://pune-urban-shield-backend.onrender.com/api/db/status');
       const json = await res.json();
       setDbStatus(json);
     } catch (_) {}

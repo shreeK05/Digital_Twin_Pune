@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API = 'http://localhost:8000';
+const API = process.env.REACT_APP_API_URL || 'https://pune-urban-shield-backend.onrender.com';
 
 export const useStore = create((set, get) => ({
   // ── Active Page
@@ -189,7 +189,8 @@ export const useStore = create((set, get) => ({
 
     // WebSocket live feed
     try {
-      const ws = new WebSocket('ws://localhost:8000/ws/live-feed');
+      const wsUrl = API.replace('https://', 'wss://').replace('http://', 'ws://');
+      const ws = new WebSocket(`${wsUrl}/ws/live-feed`);
       ws.onopen = () => set({ wsConnected: true });
       ws.onclose = () => set({ wsConnected: false });
       ws.onmessage = (e) => {

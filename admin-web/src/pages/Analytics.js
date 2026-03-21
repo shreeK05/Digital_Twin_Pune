@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-const API = 'http://localhost:8000';
+const API = process.env.REACT_APP_API_URL || 'https://pune-urban-shield-backend.onrender.com';
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;

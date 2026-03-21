@@ -6,7 +6,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 
-const API = 'http://localhost:8000';
+const API = process.env.REACT_APP_API_URL || 'https://pune-urban-shield-backend.onrender.com';
 
 const RISK_COLORS = {
   CRITICAL: '#ff2d55',

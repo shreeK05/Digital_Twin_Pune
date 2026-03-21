@@ -23,7 +23,7 @@ export default function IoTSensors() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res  = await fetch('http://localhost:8000/api/iot/sensors');
+      const res  = await fetch('https://pune-urban-shield-backend.onrender.com/api/iot/sensors');
       const json = await res.json();
       setData(json);
       setLastRefresh(new Date());

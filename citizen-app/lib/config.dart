@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 // ─────────────────────────────────────────────
 //  Backend Configuration
 // ─────────────────────────────────────────────
-const String kBackendBase = 'http://10.0.2.2:8000'; // Android emulator → localhost
-// For real device on same WiFi: 'http://192.168.x.x:8000'
+const String kBackendBase = 'https://pune-urban-shield-backend.onrender.com'; // Production (Render.com)
+// For local dev with emulator: 'http://10.0.2.2:8000'
+// For local dev with real device: 'http://YOUR_PC_IP:8000'
 
 // ─────────────────────────────────────────────
 //  Color Palette — Pune Urban Shield Design System

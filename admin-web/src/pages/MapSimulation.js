@@ -220,7 +220,7 @@ export default function MapSimulation() {
     setAiLoading(true);
     setAiReport(null);
     try {
-      const res = await fetch('http://localhost:8000/api/ai/analyze', {
+      const res = await fetch('https://pune-urban-shield-backend.onrender.com/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
