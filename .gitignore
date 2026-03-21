@@ -1,0 +1,66 @@
+# ─── Python / Backend ─────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+.eggs/
+env/
+venv/
+.venv/
+*.env
+!.env.example
+*.log
+*.pot
+
+# ─── Backend DB / Cache ───────────────────────
+backend/cache/
+backend/__pycache__/
+backend/*.graphml
+
+# ─── Node / React Web App ────────────────────
+admin-web/node_modules/
+admin-web/build/
+admin-web/.env.local
+admin-web/.env.development.local
+admin-web/.env.test.local
+admin-web/.env.production.local
+admin-web/npm-debug.log*
+admin-web/yarn-debug.log*
+admin-web/yarn-error.log*
+
+# ─── Flutter / Citizen App ───────────────────
+citizen-app/.dart_tool/
+citizen-app/.flutter-plugins
+citizen-app/.flutter-plugins-dependencies
+citizen-app/build/
+citizen-app/.packages
+citizen-app/pubspec.lock
+citizen-app/.idea/
+citizen-app/*.iml
+citizen-app/android/.gradle/
+citizen-app/android/local.properties
+citizen-app/android/.kotlin/
+
+# ─── IDE / OS ────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Temp / Misc ─────────────────────────────
+*.zip
+*.webp
+*.apk
+*.aab
+D:/
+web_build.txt
+flutter_build.txt
+flutter_doctor.txt
+npm_start_error.txt

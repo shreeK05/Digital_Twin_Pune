@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+httpx
+pydantic
+pydantic-settings
+requests
+geojson
+numpy
+pandas
+scipy
+python-multipart
+websockets
+motor
+cloudinary
+groq
+aiofiles

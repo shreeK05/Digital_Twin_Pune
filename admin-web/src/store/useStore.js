@@ -1,0 +1,212 @@
+import { create } from 'zustand';
+import axios from 'axios';
+
+const API = 'http://localhost:8000';
+
+export const useStore = create((set, get) => ({
+  // ── Active Page
+  activePage: 'dashboard',
+  setActivePage: (page) => set({ activePage: page }),
+
+  // ── Authority Filter
+  activeAuthority: 'ALL', // ALL | PMC | PCMC
+  setActiveAuthority: (auth) => set({ activeAuthority: auth }),
+
+  // ── Live Data
+  weather: null,
+  liveData: null,
+  kpis: null,
+  wards: [],
+  floodNodes: [],
+  roads: [],
+  alerts: [],
+
+  // ── Simulation State
+  simRainfall: 0,
+  simTraffic: 0,
+  closedRoads: [],
+  simRunning: false,
+  floodResult: null,
+  trafficResult: null,
+
+  // ── Real-street routing state
+  routes: [],
+  routingReady: false,
+  routesLoading: false,
+
+  // ── WebSocket
+  wsConnected: false,
+
+  // ── Setters
+  setSimRainfall: (v) => set({ simRainfall: v }),
+  setSimTraffic: (v) => set({ simTraffic: v }),
+  toggleClosedRoad: (id) => {
+    const { closedRoads } = get();
+    set({
+      closedRoads: closedRoads.includes(id)
+        ? closedRoads.filter((r) => r !== id)
+        : [...closedRoads, id],
+    });
+  },
+
+  // ── Fetch Actions
+  fetchWeather: async () => {
+    try {
+      const r = await axios.get(`${API}/api/weather/live`);
+      set({ weather: r.data });
+    } catch {}
+  },
+
+  fetchKpis: async () => {
+    try {
+      const r = await axios.get(`${API}/api/analytics/dashboard`);
+      set({ kpis: r.data });
+    } catch {}
+  },
+
+  fetchWards: async () => {
+    try {
+      const r = await axios.get(`${API}/api/map/wards`);
+      set({ wards: r.data.wards });
+    } catch {}
+  },
+
+  fetchFloodNodes: async () => {
+    try {
+      const r = await axios.get(`${API}/api/map/flood-nodes`);
+      set({ floodNodes: r.data.nodes });
+    } catch {}
+  },
+
+  fetchRoads: async () => {
+    try {
+      const r = await axios.get(`${API}/api/map/roads`);
+      set({ roads: r.data.roads });
+    } catch {}
+  },
+
+  fetchAlerts: async () => {
+    try {
+      const r = await axios.get(`${API}/api/alerts/active`);
+      set({ alerts: r.data.alerts });
+    } catch {}
+  },
+
+  // ── Simulation Runners
+  runFloodSim: async () => {
+    const { simRainfall, simTraffic, closedRoads } = get();
+    set({ simRunning: true });
+    try {
+      const r = await axios.post(`${API}/api/simulate/flood`, {
+        rainfall_percent: simRainfall,
+        traffic_surge_percent: simTraffic,
+        closed_road_ids: closedRoads,
+      });
+      set({ floodResult: r.data });
+      await get().fetchAlerts();
+      await get().fetchRoutes(r.data, get().trafficResult);
+    } catch {}
+    set({ simRunning: false });
+  },
+
+  runTrafficSim: async () => {
+    const { simRainfall, simTraffic, closedRoads } = get();
+    set({ simRunning: true });
+    try {
+      const r = await axios.post(`${API}/api/simulate/traffic`, {
+        rainfall_percent: simRainfall,
+        traffic_surge_percent: simTraffic,
+        closed_road_ids: closedRoads,
+      });
+      set({ trafficResult: r.data });
+      await get().fetchRoutes(get().floodResult, r.data);
+    } catch {}
+    set({ simRunning: false });
+  },
+
+  runCombinedSim: async () => {
+    const { simRainfall, simTraffic, closedRoads } = get();
+    set({ simRunning: true, floodResult: null, trafficResult: null });
+    try {
+      const r = await axios.post(`${API}/api/simulate/combined`, {
+        rainfall_percent: simRainfall,
+        traffic_surge_percent: simTraffic,
+        closed_road_ids: closedRoads,
+      });
+      set({ floodResult: r.data.flood, trafficResult: r.data.traffic });
+      await get().fetchAlerts();
+      await get().fetchKpis();
+      await get().fetchRoutes(r.data.flood, r.data.traffic);
+    } catch {}
+    set({ simRunning: false });
+  },
+
+  resetSim: () => set({ floodResult: null, trafficResult: null, simRainfall: 0, simTraffic: 0, closedRoads: [], routes: [] }),
+
+  // ── Street Routing (OSMnx real-street routes)
+  fetchRoutes: async (floodResult, trafficResult) => {
+    set({ routesLoading: true });
+    try {
+      // First check if routing graph is ready
+      const statusRes = await axios.get(`${API}/api/routing/status`);
+      const ready = statusRes.data?.ready;
+      set({ routingReady: ready });
+      if (!ready) { set({ routesLoading: false }); return; }
+
+      // Send flood zones + traffic to get rerouted street paths
+      const floodedNodes = (floodResult?.affected_nodes || []).map(n => ({
+        lat: n.lat, lng: n.lng, risk_level: n.risk_level,
+      }));
+      const r = await axios.post(`${API}/api/routing/all-routes`, {
+        flooded_nodes:   floodedNodes,
+        traffic_results: trafficResult?.roads || [],
+      });
+      if (r.data?.routes) set({ routes: r.data.routes });
+    } catch {}
+    set({ routesLoading: false });
+  },
+
+  // ── Alert Broadcast
+  broadcastAlert: async (payload) => {
+    try {
+      await axios.post(`${API}/api/alerts/broadcast`, payload);
+      await get().fetchAlerts();
+      return true;
+    } catch { return false; }
+  },
+
+  acknowledgeAlert: async (id) => {
+    try {
+      await axios.put(`${API}/api/alerts/${id}/acknowledge`);
+      await get().fetchAlerts();
+    } catch {}
+  },
+
+  // ── Init
+  initApp: async () => {
+    const { fetchWeather, fetchKpis, fetchWards, fetchFloodNodes, fetchRoads, fetchAlerts } = get();
+    await Promise.all([fetchWeather(), fetchKpis(), fetchWards(), fetchFloodNodes(), fetchRoads(), fetchAlerts()]);
+
+    // WebSocket live feed
+    try {
+      const ws = new WebSocket('ws://localhost:8000/ws/live-feed');
+      ws.onopen = () => set({ wsConnected: true });
+      ws.onclose = () => set({ wsConnected: false });
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'LIVE_UPDATE') {
+          set({ liveData: msg, weather: msg.weather });
+        }
+        if (msg.type === 'NEW_ALERT') {
+          get().fetchAlerts();
+        }
+      };
+    } catch {}
+
+    // Refresh KPIs every 30s
+    setInterval(() => {
+      get().fetchKpis();
+      get().fetchAlerts();
+    }, 30000);
+  },
+}));

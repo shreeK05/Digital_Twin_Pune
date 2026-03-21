@@ -1,0 +1,30 @@
+{
+  "name": "pune-urban-shield-admin",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Pune Urban Shield — Admin Command Center (PMC + PCMC)",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1",
+    "recharts": "^2.12.4",
+    "zustand": "^4.5.2",
+    "axios": "^1.6.8",
+    "react-icons": "^5.1.0",
+    "date-fns": "^3.6.0",
+    "framer-motion": "^11.0.28"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+  },
+  "devDependencies": {
+    "react-scripts": "5.0.1"
+  }
+}
