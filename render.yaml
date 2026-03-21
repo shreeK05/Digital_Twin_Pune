@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: pune-urban-shield-backend
+    env: python
+    region: singapore   # closest to Pune
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URI
+        sync: false          # you will paste this in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://pune-urban-shield.netlify.app   # update after Netlify deploy
