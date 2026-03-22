@@ -184,9 +184,14 @@ export default function MapSimulation() {
     // When routing results also arrive, switch to ROUTING mode if we have routes
   }, [floodResult, trafficResult]);
 
+  // Only auto-switch to ROUTING on initial load (when no simulation has run yet)
+  const routesInitialLoad = useRef(false);
   useEffect(() => {
-    if (routes && routes.length > 0) setMapMode('ROUTING');
-  }, [routes]);
+    if (routes && routes.length > 0 && !routesInitialLoad.current) {
+      routesInitialLoad.current = true;
+      if (!floodResult && !trafficResult) { setMapMode('ROUTING'); }
+    }
+  }, [routes, floodResult, trafficResult]);
 
   useEffect(() => {
     if (!floodResult && !trafficResult) setAiReport(null);
@@ -349,7 +354,7 @@ export default function MapSimulation() {
               border: `1px solid ${routingReady ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)'}`,
               fontWeight: 700,
             }}>
-              🛣️ OSMnx {routingReady ? `READY · ${routes.length} routes` : routesLoading ? 'Loading…' : 'Pending'}
+              🛣️ {routesLoading ? 'Routes Loading…' : routingReady ? `Routes READY · ${routes.length}` : 'Routes Pending'}
             </span>
             <span style={{
               fontSize: 9, padding: '2px 8px', borderRadius: 99,
@@ -635,7 +640,7 @@ export default function MapSimulation() {
               </div>
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--text-2)', marginBottom: 8 }}>
-              OSMnx · NetworkX Dijkstra · Real Pune street network
+              CorridorRouter · 22 Pune Road Corridors · Flood-aware routing
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
               {routes.map((route, idx) => (

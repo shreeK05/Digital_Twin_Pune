@@ -143,25 +143,19 @@ export const useStore = create((set, get) => ({
 
   resetSim: () => set({ floodResult: null, trafficResult: null, simRainfall: 0, simTraffic: 0, closedRoads: [], routes: [] }),
 
-  // ── Street Routing (OSMnx real-street routes)
+  // ── Street Routing (Corridor-based, always ready)
   fetchRoutes: async (floodResult, trafficResult) => {
-    set({ routesLoading: true });
+    set({ routesLoading: true, routingReady: true });
     try {
-      // First check if routing graph is ready
-      const statusRes = await axios.get(`${API}/api/routing/status`);
-      const ready = statusRes.data?.ready;
-      set({ routingReady: ready });
-      if (!ready) { set({ routesLoading: false }); return; }
-
-      // Send flood zones + traffic to get rerouted street paths
-      const floodedNodes = (floodResult?.affected_nodes || []).map(n => ({
+      // Build flooded nodes from simulation results (field is 'results' not 'affected_nodes')
+      const floodedNodes = (floodResult?.results || []).map(n => ({
         lat: n.lat, lng: n.lng, risk_level: n.risk_level,
       }));
       const r = await axios.post(`${API}/api/routing/all-routes`, {
         flooded_nodes:   floodedNodes,
-        traffic_results: trafficResult?.roads || [],
+        traffic_results: trafficResult?.results || [],
       });
-      if (r.data?.routes) set({ routes: r.data.routes });
+      if (r.data?.routes) set({ routes: r.data.routes, routingReady: true });
     } catch {}
     set({ routesLoading: false });
   },
@@ -209,5 +203,8 @@ export const useStore = create((set, get) => ({
       get().fetchKpis();
       get().fetchAlerts();
     }, 30000);
+
+    // Load routes immediately on startup (no simulation needed)
+    get().fetchRoutes(null, null);
   },
 }));
