@@ -554,8 +554,27 @@ def generate_rerouting(closed_road_ids: List[str]) -> List[dict]:
 active_alerts = []
 alert_counter = 100
 
+# Tracks fingerprints of recent auto-generated alerts to prevent duplicates.
+# Key: (title_prefix, severity)  →  Value: datetime of last insertion
+_auto_alert_fingerprints: Dict[str, datetime] = {}
+AUTO_ALERT_COOLDOWN_SECONDS = 120  # same auto-alert won't re-fire within 2 min
+
+def _make_fingerprint(title: str, severity: str) -> str:
+    """Create a dedup key from the first ~40 chars of the title + severity."""
+    return f"{title[:40].strip()}|{severity}"
+
 def add_alert(title, message, severity, area, auto=False):
     global alert_counter
+
+    if auto:
+        fp = _make_fingerprint(title, severity)
+        last_fired = _auto_alert_fingerprints.get(fp)
+        now = datetime.now()
+        if last_fired and (now - last_fired).total_seconds() < AUTO_ALERT_COOLDOWN_SECONDS:
+            # Return a dummy dict so callers don't crash — but don't add to store
+            return {"id": "DEDUP", "title": title, "suppressed": True}
+        _auto_alert_fingerprints[fp] = now
+
     alert_counter += 1
     alert = {
         "id": f"ALT{alert_counter:04d}",
@@ -675,26 +694,36 @@ async def get_weather_forecast():
 
 # --- Simulation ---
 @app.post("/api/simulate/flood")
-async def simulate_flood(req: SimulationRequest, background_tasks: BackgroundTasks):
+async def simulate_flood(
+    req: SimulationRequest,
+    background_tasks: BackgroundTasks,
+    suppress_alerts: bool = Query(False, description="If true, skip auto-alert generation (used by debounce auto-runs)"),
+):
     """Run hydrological flood simulation"""
     weather = await fetch_live_weather()
     result = run_flood_simulation(req.rainfall_percent, weather)
-    
-    # Auto-generate alerts for critical zones
-    critical = [r for r in result["results"] if r["risk_level"] == "CRITICAL"]
-    for zone in critical:
-        alert = add_alert(
-            f"⚠️ Flood Alert: {zone['location']}",
-            f"Critical flood risk detected. Effective rainfall {zone['effective_rainfall_mm']} mm/hr. Estimated flood in {zone['time_to_flood_hours']:.1f} hours.",
-            "CRITICAL", zone["location"], auto=True
-        )
-        background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
-    
+
+    if not suppress_alerts:
+        # Auto-generate alerts for critical zones (deduplication is handled inside add_alert)
+        critical = [r for r in result["results"] if r["risk_level"] == "CRITICAL"]
+        for zone in critical:
+            alert = add_alert(
+                f"⚠️ Flood Alert: {zone['location']}",
+                f"Critical flood risk detected. Effective rainfall {zone['effective_rainfall_mm']} mm/hr.",
+                "CRITICAL", zone["location"], auto=True
+            )
+            if not alert.get("suppressed"):
+                background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
+
     background_tasks.add_task(manager.broadcast, {"type": "FLOOD_SIMULATION", "result": result})
     return result
 
 @app.post("/api/simulate/traffic")
-async def simulate_traffic(req: SimulationRequest, background_tasks: BackgroundTasks):
+async def simulate_traffic(
+    req: SimulationRequest,
+    background_tasks: BackgroundTasks,
+    suppress_alerts: bool = Query(False, description="If true, skip auto-alert generation (used by debounce auto-runs)"),
+):
     """Run graph-theory traffic simulation"""
     weather = await fetch_live_weather()
     result = run_traffic_simulation(req.traffic_surge_percent, req.closed_road_ids, weather)
@@ -702,7 +731,11 @@ async def simulate_traffic(req: SimulationRequest, background_tasks: BackgroundT
     return result
 
 @app.post("/api/simulate/combined")
-async def simulate_combined(req: SimulationRequest, background_tasks: BackgroundTasks):
+async def simulate_combined(
+    req: SimulationRequest,
+    background_tasks: BackgroundTasks,
+    suppress_alerts: bool = Query(False, description="If true, skip auto-alert generation (used by debounce auto-runs)"),
+):
     """Run combined flood + traffic simulation"""
     weather = await fetch_live_weather()
     flood   = run_flood_simulation(req.rainfall_percent, weather)
@@ -711,44 +744,48 @@ async def simulate_combined(req: SimulationRequest, background_tasks: Background
     # Cross-impact: flooded zones automatically close roads
     flooded_areas = [r["location"] for r in flood["results"] if r["risk_level"] in ["CRITICAL", "HIGH"]]
 
-    # ── Smart summary alerts (not one per zone — avoids spam) ─────────────────
-    critical_zones = [z for z in flood["results"] if z["risk_level"] == "CRITICAL"]
-    high_zones     = [z for z in flood["results"] if z["risk_level"] == "HIGH"]
-    severe_roads   = [r for r in traffic["results"] if r.get("status") in ["SEVERE_JAM", "CLOSED"]]
+    # ── Smart summary alerts — only when suppress_alerts=False AND dedup allows ──
+    if not suppress_alerts:
+        critical_zones = [z for z in flood["results"] if z["risk_level"] == "CRITICAL"]
+        high_zones     = [z for z in flood["results"] if z["risk_level"] == "HIGH"]
+        severe_roads   = [r for r in traffic["results"] if r.get("status") in ["SEVERE_JAM", "CLOSED"]]
 
-    if critical_zones:
-        names   = ", ".join(z["location"] for z in critical_zones[:3])
-        top     = critical_zones[0]
-        ttf_str = f" Flood ETA ~{top['time_to_flood_hours']:.1f} hrs." if top.get("time_to_flood_hours") else ""
-        alert = add_alert(
-            f"🌊 CRITICAL Flood Risk — {len(critical_zones)} zone{'s' if len(critical_zones)>1 else ''}",
-            f"Critical flood risk at: {names}{'...' if len(critical_zones)>3 else ''}.{ttf_str} "
-            f"Effective rainfall: {top['effective_rainfall_mm']} mm/hr. Immediate deployment required.",
-            "CRITICAL", names[:60], auto=True
-        )
-        background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
+        if critical_zones:
+            names   = ", ".join(z["location"] for z in critical_zones[:3])
+            top     = critical_zones[0]
+            ttf_str = f" Flood ETA ~{top['time_to_flood_hours']:.1f} hrs." if top.get("time_to_flood_hours") else ""
+            alert = add_alert(
+                f"🌊 CRITICAL Flood Risk — {len(critical_zones)} zone{'s' if len(critical_zones)>1 else ''}",
+                f"Critical flood risk at: {names}{'...' if len(critical_zones)>3 else ''}.{ttf_str} "
+                f"Effective rainfall: {top['effective_rainfall_mm']} mm/hr. Immediate deployment required.",
+                "CRITICAL", names[:60], auto=True
+            )
+            if not alert.get("suppressed"):
+                background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
 
-    if high_zones and not critical_zones:
-        names = ", ".join(z["location"] for z in high_zones[:3])
-        alert = add_alert(
-            f"⚠️ High Flood Risk — {len(high_zones)} zone{'s' if len(high_zones)>1 else ''}",
-            f"High flood risk detected at: {names}{'...' if len(high_zones)>3 else ''}. "
-            f"Prepare pump teams and monitor drainage thresholds.",
-            "HIGH", names[:60], auto=True
-        )
-        background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
+        if high_zones and not critical_zones:
+            names = ", ".join(z["location"] for z in high_zones[:3])
+            alert = add_alert(
+                f"⚠️ High Flood Risk — {len(high_zones)} zone{'s' if len(high_zones)>1 else ''}",
+                f"High flood risk detected at: {names}{'...' if len(high_zones)>3 else ''}. "
+                f"Prepare pump teams and monitor drainage thresholds.",
+                "HIGH", names[:60], auto=True
+            )
+            if not alert.get("suppressed"):
+                background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
 
-    if severe_roads:
-        roads_str = ", ".join(r["road_name"] for r in severe_roads[:3])
-        level     = traffic["summary"].get("city_congestion_level", "HIGH")
-        alert = add_alert(
-            f"🚦 Severe Traffic Congestion — {len(severe_roads)} corridor{'s' if len(severe_roads)>1 else ''}",
-            f"Simulation detected severe jams on: {roads_str}{'...' if len(severe_roads)>3 else ''}. "
-            f"City congestion level: {level}. Activate signal control and alternate routing.",
-            "HIGH" if len(severe_roads) >= 3 else "MEDIUM",
-            "City-Wide Traffic Corridors", auto=True
-        )
-        background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
+        if severe_roads:
+            roads_str = ", ".join(r["road_name"] for r in severe_roads[:3])
+            level     = traffic["summary"].get("city_congestion_level", "HIGH")
+            alert = add_alert(
+                f"🚦 Severe Traffic Congestion — {len(severe_roads)} corridor{'s' if len(severe_roads)>1 else ''}",
+                f"Simulation detected severe jams on: {roads_str}{'...' if len(severe_roads)>3 else ''}. "
+                f"City congestion level: {level}. Activate signal control and alternate routing.",
+                "HIGH" if len(severe_roads) >= 3 else "MEDIUM",
+                "City-Wide Traffic Corridors", auto=True
+            )
+            if not alert.get("suppressed"):
+                background_tasks.add_task(manager.broadcast, {"type": "NEW_ALERT", "alert": alert})
 
     combined = {
         "weather": weather,

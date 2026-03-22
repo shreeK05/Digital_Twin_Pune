@@ -162,7 +162,7 @@ export default function MapSimulation() {
   const triggerAutoSim = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      runCombinedSim();
+      runCombinedSim(true); // suppress alerts on auto debounce runs
     }, 900);
   }, [runCombinedSim]);
 
@@ -246,7 +246,7 @@ export default function MapSimulation() {
   const handleRoadToggle = useCallback((roadId) => {
     toggleClosedRoad(roadId);
     // Slight delay so store updates first
-    setTimeout(() => runTrafficSim(), 200);
+    setTimeout(() => runTrafficSim(true), 200); // suppress alerts on auto road-toggle rerun
   }, [toggleClosedRoad, runTrafficSim]);
 
   // Simulation status text

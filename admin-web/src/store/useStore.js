@@ -93,27 +93,30 @@ export const useStore = create((set, get) => ({
   },
 
   // ── Simulation Runners
-  runFloodSim: async () => {
+  // suppressAlerts=true → backend skips alert generation (used for debounce auto-runs)
+  runFloodSim: async (suppressAlerts = false) => {
     const { simRainfall, simTraffic, closedRoads } = get();
     set({ simRunning: true });
     try {
-      const r = await axios.post(`${API}/api/simulate/flood`, {
+      const qs = suppressAlerts ? '?suppress_alerts=true' : '';
+      const r = await axios.post(`${API}/api/simulate/flood${qs}`, {
         rainfall_percent: simRainfall,
         traffic_surge_percent: simTraffic,
         closed_road_ids: closedRoads,
       });
       set({ floodResult: r.data });
-      await get().fetchAlerts();
+      if (!suppressAlerts) await get().fetchAlerts();
       await get().fetchRoutes(r.data, get().trafficResult);
     } catch {}
     set({ simRunning: false });
   },
 
-  runTrafficSim: async () => {
+  runTrafficSim: async (suppressAlerts = false) => {
     const { simRainfall, simTraffic, closedRoads } = get();
     set({ simRunning: true });
     try {
-      const r = await axios.post(`${API}/api/simulate/traffic`, {
+      const qs = suppressAlerts ? '?suppress_alerts=true' : '';
+      const r = await axios.post(`${API}/api/simulate/traffic${qs}`, {
         rainfall_percent: simRainfall,
         traffic_surge_percent: simTraffic,
         closed_road_ids: closedRoads,
@@ -124,17 +127,18 @@ export const useStore = create((set, get) => ({
     set({ simRunning: false });
   },
 
-  runCombinedSim: async () => {
+  runCombinedSim: async (suppressAlerts = false) => {
     const { simRainfall, simTraffic, closedRoads } = get();
     set({ simRunning: true, floodResult: null, trafficResult: null });
     try {
-      const r = await axios.post(`${API}/api/simulate/combined`, {
+      const qs = suppressAlerts ? '?suppress_alerts=true' : '';
+      const r = await axios.post(`${API}/api/simulate/combined${qs}`, {
         rainfall_percent: simRainfall,
         traffic_surge_percent: simTraffic,
         closed_road_ids: closedRoads,
       });
       set({ floodResult: r.data.flood, trafficResult: r.data.traffic });
-      await get().fetchAlerts();
+      if (!suppressAlerts) await get().fetchAlerts();
       await get().fetchKpis();
       await get().fetchRoutes(r.data.flood, r.data.traffic);
     } catch {}
